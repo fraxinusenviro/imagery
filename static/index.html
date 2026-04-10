@@ -530,7 +530,7 @@ async function handleUpload(file) {
     algoSelect.disabled = false;
     segmentBtn.disabled = false;
     buildParamsPanel(algoSelect.value);
-    triggerSegment();
+    await triggerSegment();
 
   } catch (e) {
     setStatus("Upload failed: " + e.message, "error");
