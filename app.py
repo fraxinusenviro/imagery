@@ -7,7 +7,7 @@ import tempfile
 
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory, session
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from segmentation import ALGORITHMS, get_schema
 from segmentation.utils import encode_to_base64, resize_for_display, labels_to_color_image, overlay_boundaries
@@ -78,8 +78,6 @@ def upload():
 
     raw = file.read()
     try:
-        pil_img = Image.open(io.BytesIO(raw))
-        pil_img.verify()
         pil_img = Image.open(io.BytesIO(raw))
         pil_img = pil_img.convert("RGB")
     except Exception as e:
