@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imagery — Image Segmentation</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --sidebar-bg: #1a1d23;
+    --sidebar-border: #2d3140;
+    --canvas-bg: #12141a;
+    --accent: #4f8ef7;
+    --accent-hover: #6fa3ff;
+    --text: #e2e6f0;
+    --text-muted: #7a8099;
+    --text-dim: #4a5068;
+    --input-bg: #252836;
+    --input-border: #353849;
+    --success: #3ecf8e;
+    --warning: #f5a623;
+    --error: #e05c5c;
+    --slider-track: #353849;
+    --slider-fill: #4f8ef7;
+    --radius: 6px;
+    --sidebar-w: 300px;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--canvas-bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    height: 48px;
+    background: var(--sidebar-bg);
+    border-bottom: 1px solid var(--sidebar-border);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  header span {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ── */
+  aside {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--sidebar-border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--sidebar-border);
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+
+  /* Upload zone */
+  #drop-zone {
+    border: 2px dashed var(--input-border);
+    border-radius: var(--radius);
+    padding: 20px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(79,142,247,0.06);
+    color: var(--text);
+  }
+  #drop-zone .icon { font-size: 22px; display: block; margin-bottom: 6px; }
+  #drop-zone input { display: none; }
+
+  #upload-info {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    min-height: 16px;
+  }
+
+  /* Algorithm select */
+  select, .btn {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a8099' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+  select:focus, .btn:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* Sliders */
+  #params-panel { display: flex; flex-direction: column; gap: 14px; }
+
+  .param-row { display: flex; flex-direction: column; gap: 4px; }
+  .param-header { display: flex; justify-content: space-between; align-items: baseline; }
+  .param-label { font-size: 12px; color: var(--text-muted); }
+  .param-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .param-range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--slider-track);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    border: 2px solid var(--canvas-bg);
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { background: var(--accent-hover); transform: scale(1.15); }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--canvas-bg);
+  }
+
+  .select-row { display: flex; flex-direction: column; gap: 4px; }
+  .select-row .param-label { font-size: 12px; color: var(--text-muted); }
+  .select-row select { font-size: 12px; padding: 6px 28px 6px 8px; }
+
+  /* Display mode toggle */
+  .toggle-row {
+    display: flex;
+    gap: 6px;
+  }
+  .toggle-btn {
+    flex: 1;
+    padding: 6px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .toggle-btn.active {
+    background: rgba(79,142,247,0.18);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Action buttons */
+  .btn {
+    text-align: center;
+    font-weight: 500;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-secondary { background: var(--input-bg); }
+  .btn-secondary:hover:not(:disabled) { background: #2e3244; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Status */
+  #status-bar {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 6px 0 2px;
+    min-height: 22px;
+  }
+  #status-bar.error { color: var(--error); }
+  #status-bar.success { color: var(--success); }
+
+  /* ── Main canvas area ── */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 24px;
+    position: relative;
+  }
+
+  #canvas-area {
+    position: relative;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #result-img {
+    max-width: 100%;
+    max-height: calc(100vh - 96px);
+    border-radius: var(--radius);
+    display: none;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+  }
+
+  #drop-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 40px;
+  }
+  #drop-prompt .big-icon { font-size: 48px; opacity: 0.4; }
+  #drop-prompt p { font-size: 14px; line-height: 1.6; }
+
+  /* Spinner overlay */
+  #spinner {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    background: rgba(18,20,26,0.6);
+    border-radius: var(--radius);
+    backdrop-filter: blur(2px);
+  }
+  #spinner.active { display: flex; }
+  .spin {
+    width: 36px; height: 36px;
+    border: 3px solid var(--input-border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: rotate 0.7s linear infinite;
+  }
+  @keyframes rotate { to { transform: rotate(360deg); } }
+
+  /* Metadata strip */
+  #meta-strip {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(26,29,35,0.88);
+    border: 1px solid var(--sidebar-border);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: none;
+    white-space: nowrap;
+    gap: 12px;
+    align-items: center;
+    backdrop-filter: blur(4px);
+  }
+  #meta-strip.visible { display: flex; }
+  #meta-strip span { color: var(--text); font-weight: 600; }
+
+  /* Responsive */
+  @media (max-width: 820px) {
+    .layout { flex-direction: column; overflow: auto; }
+    aside {
+      width: 100%;
+      min-width: unset;
+      border-right: none;
+      border-bottom: 1px solid var(--sidebar-border);
+      overflow: visible;
+    }
+    main { min-height: 50vh; padding: 16px; }
+    body { overflow: auto; height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Imagery</h1>
+  <span>Image Segmentation Tool</span>
+</header>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside>
+
+    <div class="section">
+      <div class="section-label">Image</div>
+      <div id="drop-zone" role="button" tabindex="0" aria-label="Upload image">
+        <span class="icon">&#128247;</span>
+        Drop image here<br>or click to browse
+        <input type="file" id="file-input" accept="image/*">
+      </div>
+      <div id="upload-info"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Algorithm</div>
+      <select id="algo-select" disabled>
+        <option value="">Upload an image first</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Parameters</div>
+      <div id="params-panel">
+        <div style="font-size:12px;color:var(--text-dim)">Upload an image to see controls.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Display</div>
+      <div class="toggle-row">
+        <button class="toggle-btn active" id="mode-color" data-mode="color">Colored Labels</button>
+        <button class="toggle-btn" id="mode-boundary" data-mode="boundary">Boundary Overlay</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Actions</div>
+      <div class="actions">
+        <button class="btn btn-primary" id="segment-btn" disabled>Segment</button>
+        <button class="btn btn-secondary" id="download-btn" disabled>Download Result</button>
+      </div>
+      <div id="status-bar"></div>
+    </div>
+
+  </aside>
+
+  <!-- ── Main canvas ── -->
+  <main>
+    <div id="canvas-area">
+      <div id="drop-prompt">
+        <div class="big-icon">&#127752;</div>
+        <p>Upload an RGB image to get started.<br>Adjust the sliders to explore segmentation.</p>
+      </div>
+      <img id="result-img" alt="Segmentation result">
+      <div id="spinner"><div class="spin"></div></div>
+    </div>
+    <div id="meta-strip">
+      Segments: <span id="meta-segments">—</span>
+      &nbsp;·&nbsp;
+      Time: <span id="meta-time">—</span>
+    </div>
+  </main>
+
+</div>
+
+<script type="module">
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let schema = {};           // algorithm schema from /algorithms
+let currentAlgo = null;    // currently selected algorithm key
+let displayMode = "color"; // "color" | "boundary"
+let resultB64 = null;      // current result image base64
+let abortCtrl = null;      // AbortController for in-flight /segment requests
+let debounceTimer = null;
+
+// ─────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────
+const dropZone     = document.getElementById("drop-zone");
+const fileInput    = document.getElementById("file-input");
+const uploadInfo   = document.getElementById("upload-info");
+const algoSelect   = document.getElementById("algo-select");
+const paramsPanel  = document.getElementById("params-panel");
+const segmentBtn   = document.getElementById("segment-btn");
+const downloadBtn  = document.getElementById("download-btn");
+const statusBar    = document.getElementById("status-bar");
+const resultImg    = document.getElementById("result-img");
+const dropPrompt   = document.getElementById("drop-prompt");
+const spinner      = document.getElementById("spinner");
+const metaStrip    = document.getElementById("meta-strip");
+const metaSegments = document.getElementById("meta-segments");
+const metaTime     = document.getElementById("meta-time");
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+async function init() {
+  try {
+    const res = await fetch("/algorithms");
+    schema = await res.json();
+    populateAlgoSelect();
+  } catch (e) {
+    setStatus("Could not load algorithm list from server.", "error");
+  }
+}
+
+function populateAlgoSelect() {
+  algoSelect.innerHTML = "";
+  for (const [key, algo] of Object.entries(schema)) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = algo.label;
+    algoSelect.appendChild(opt);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Upload
+// ─────────────────────────────────────────────
+dropZone.addEventListener("click", () => fileInput.click());
+dropZone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) handleUpload(fileInput.files[0]); });
+
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) handleUpload(file);
+});
+
+// Also allow dropping on the main canvas area
+document.querySelector("main").addEventListener("dragover", e => { e.preventDefault(); });
+document.querySelector("main").addEventListener("drop", e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleUpload(file);
+});
+
+async function handleUpload(file) {
+  if (!file.type.startsWith("image/")) {
+    setStatus("Please upload an image file.", "error");
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    setStatus("File too large. Maximum 10 MB.", "error");
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("image", file);
+
+  setStatus("Uploading…");
+  showSpinner(true);
+
+  try {
+    const res = await fetch("/upload", { method: "POST", body: fd });
+    const data = await res.json();
+
+    if (!res.ok) { setStatus(data.error || "Upload failed.", "error"); showSpinner(false); return; }
+
+    // Show preview
+    resultImg.src = `data:image/jpeg;base64,${data.preview}`;
+    resultImg.style.display = "block";
+    dropPrompt.style.display = "none";
+    resultB64 = null;
+    metaStrip.classList.remove("visible");
+    downloadBtn.disabled = true;
+
+    uploadInfo.textContent = `${data.width} × ${data.height} px — ${(file.size / 1024).toFixed(0)} KB`;
+    setStatus("Image loaded. Adjust parameters and segment.", "success");
+
+    // Enable controls
+    algoSelect.disabled = false;
+    segmentBtn.disabled = false;
+    buildParamsPanel(algoSelect.value);
+    triggerSegment();
+
+  } catch (e) {
+    setStatus("Upload failed: " + e.message, "error");
+  } finally {
+    showSpinner(false);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Algorithm / params UI
+// ─────────────────────────────────────────────
+algoSelect.addEventListener("change", () => {
+  currentAlgo = algoSelect.value;
+  buildParamsPanel(currentAlgo);
+  triggerSegment();
+});
+
+function buildParamsPanel(algoKey) {
+  currentAlgo = algoKey;
+  if (!schema[algoKey]) return;
+  const { params, selects } = schema[algoKey];
+
+  paramsPanel.innerHTML = "";
+
+  for (const p of params) {
+    paramsPanel.appendChild(makeSlider(p));
+  }
+  for (const s of selects) {
+    paramsPanel.appendChild(makeSelectRow(s));
+  }
+  if (params.length === 0 && selects.length === 0) {
+    paramsPanel.innerHTML = `<div style="font-size:12px;color:var(--text-dim)">No parameters.</div>`;
+  }
+}
+
+function makeSlider(p) {
+  const row = document.createElement("div");
+  row.className = "param-row";
+  row.dataset.paramName = p.name;
+
+  const header = document.createElement("div");
+  header.className = "param-header";
+
+  const label = document.createElement("span");
+  label.className = "param-label";
+  label.textContent = p.label;
+
+  const valueDisplay = document.createElement("span");
+  valueDisplay.className = "param-value";
+  valueDisplay.textContent = p.default;
+
+  header.appendChild(label);
+  header.appendChild(valueDisplay);
+
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = p.min;
+  input.max = p.max;
+  input.step = p.step;
+  input.value = p.default;
+  input.dataset.paramName = p.name;
+
+  // Update fill gradient
+  const updateFill = () => {
+    const pct = ((input.value - p.min) / (p.max - p.min)) * 100;
+    input.style.background = `linear-gradient(to right, var(--slider-fill) ${pct}%, var(--slider-track) ${pct}%)`;
+    valueDisplay.textContent = input.value;
+  };
+  updateFill();
+
+  input.addEventListener("input", () => {
+    updateFill();
+    triggerSegmentDebounced();
+  });
+
+  const rangeLabels = document.createElement("div");
+  rangeLabels.className = "param-range-labels";
+  rangeLabels.innerHTML = `<span>${p.min}</span><span>${p.max}</span>`;
+
+  row.appendChild(header);
+  row.appendChild(input);
+  row.appendChild(rangeLabels);
+  return row;
+}
+
+function makeSelectRow(s) {
+  const row = document.createElement("div");
+  row.className = "select-row";
+  row.dataset.selectName = s.name;
+
+  const label = document.createElement("div");
+  label.className = "param-label";
+  label.textContent = s.label;
+
+  const sel = document.createElement("select");
+  for (const opt of s.options) {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    if (opt === s.default) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.dataset.selectName = s.name;
+  sel.addEventListener("change", () => triggerSegmentDebounced());
+
+  row.appendChild(label);
+  row.appendChild(sel);
+  return row;
+}
+
+// ─────────────────────────────────────────────
+// Display mode toggle
+// ─────────────────────────────────────────────
+document.querySelectorAll(".toggle-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".toggle-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    displayMode = btn.dataset.mode;
+    triggerSegment();
+  });
+});
+
+// ─────────────────────────────────────────────
+// Segmentation
+// ─────────────────────────────────────────────
+segmentBtn.addEventListener("click", triggerSegment);
+
+function triggerSegmentDebounced() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(triggerSegment, 300);
+}
+
+function collectParams() {
+  const params = {};
+  paramsPanel.querySelectorAll("input[type=range]").forEach(el => {
+    params[el.dataset.paramName] = Number(el.value);
+  });
+  paramsPanel.querySelectorAll("select").forEach(el => {
+    params[el.dataset.selectName] = el.value;
+  });
+  return params;
+}
+
+async function triggerSegment() {
+  if (segmentBtn.disabled) return;
+
+  // Cancel any in-flight request
+  if (abortCtrl) abortCtrl.abort();
+  abortCtrl = new AbortController();
+
+  const algo = algoSelect.value;
+  if (!algo) return;
+
+  const params = collectParams();
+  showSpinner(true);
+  setStatus("Segmenting…");
+
+  try {
+    const res = await fetch("/segment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ algorithm: algo, params, display_mode: displayMode }),
+      signal: abortCtrl.signal,
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setStatus(data.error || "Segmentation failed.", "error");
+      return;
+    }
+
+    resultImg.src = `data:image/png;base64,${data.result_image}`;
+    resultImg.style.display = "block";
+    resultB64 = data.result_image;
+    downloadBtn.disabled = false;
+
+    const m = data.metadata || {};
+    metaSegments.textContent = m.n_segments ?? "—";
+    metaTime.textContent = m.elapsed_ms != null ? `${m.elapsed_ms} ms` : "—";
+    metaStrip.classList.add("visible");
+
+    let statusMsg = `Done — ${m.n_segments ?? "?"} segment${(m.n_segments ?? 0) !== 1 ? "s" : ""} in ${m.elapsed_ms ?? "?"}ms`;
+    if (m.thresholds) statusMsg += ` · thresholds: [${m.thresholds.join(", ")}]`;
+    setStatus(statusMsg, "success");
+
+  } catch (e) {
+    if (e.name !== "AbortError") {
+      setStatus("Request failed: " + e.message, "error");
+    }
+  } finally {
+    showSpinner(false);
+    abortCtrl = null;
+  }
+}
+
+// ─────────────────────────────────────────────
+// Download
+// ─────────────────────────────────────────────
+downloadBtn.addEventListener("click", () => {
+  if (!resultB64) return;
+  const a = document.createElement("a");
+  a.href = `data:image/png;base64,${resultB64}`;
+  a.download = `segmented_${algoSelect.value}.png`;
+  a.click();
+});
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function showSpinner(visible) {
+  spinner.classList.toggle("active", visible);
+}
+
+function setStatus(msg, type = "") {
+  statusBar.textContent = msg;
+  statusBar.className = type;
+}
+
+// ─────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
